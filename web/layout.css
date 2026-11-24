@@ -1,0 +1,42 @@
+.topbar { display: flex; align-items: center; gap: 1rem; padding: .8rem max(1.25rem, calc((100% - 1320px) / 2)); background: var(--anchor); color: #fff7eb; }
+.brand { display: inline-flex; align-items: center; gap: .52rem; color: inherit; font-weight: 750; font-size: 1.35rem; text-decoration: none; }
+.brand i { width: 1.1rem; height: 1.1rem; border: 2px solid #f79559; border-radius: 3px; box-shadow: inset 0 0 0 2px var(--anchor); background: #f79559; }
+.product { color: #e8d8c8; border-left: 1px solid #6c5a4b; padding-left: 1rem; font-size: .88rem; }
+.push { margin-left: auto; }
+.shell { max-width: 1360px; margin: auto; padding: 1rem 1.25rem 3rem; }
+.toolbar, .workspace-title, .panel-heading { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .65rem; }
+.toolbar { border-bottom: 1px solid var(--border); padding-bottom: .8rem; }
+.toolbar label { margin-right: .4rem; }
+.workspace-title { padding: 1.6rem 0 1rem; }
+.counts { display: flex; gap: .45rem; flex-wrap: wrap; }
+.work-grid { display: grid; grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr); gap: 1rem; }
+.panel, .empty { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1rem; }
+.empty { margin-top: 1rem; padding: clamp(1.5rem, 5vw, 3.5rem); }
+.empty p { margin: .6rem 0 1.25rem; color: var(--muted); }
+.tray-list { list-style: none; padding: 0; margin: .8rem 0 0; }
+.tray-list button { width: 100%; display: flex; justify-content: space-between; gap: .25rem; align-items: center; margin-bottom: .35rem; }
+.tray-list button[aria-current="true"] { background: #f9e5d4; border-color: #be6b42; }
+.detail { min-width: 0; }
+.issues { padding-left: 1.35rem; color: #872c23; font-size: .88rem; }
+.issues:empty { display: none; }
+.review-box { border-top: 1px solid var(--border); margin-top: 1.2rem; padding-top: 1rem; }
+.review-box form { display: flex; flex-wrap: wrap; gap: .65rem; align-items: end; margin-top: .8rem; }
+.review-box label { display: grid; gap: .3rem; font-size: .85rem; min-width: min(12rem, 100%); }
+.grow { flex: 1; }
+#notice { background: #eadfcf; border: 1px solid var(--border); border-radius: 6px; margin-bottom: .8rem; padding: .65rem .8rem; }
+[data-error="true"] { color: #872c23; }
+dialog { width: min(43rem, calc(100% - 2rem)); max-height: 90vh; color: inherit; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 1.2rem; }
+dialog::backdrop { background: #21160eb0; }
+dialog label { display: block; margin: .8rem 0 .3rem; font-weight: 600; font-size: .9rem; }
+dialog textarea { width: 100%; resize: vertical; font-family: ui-monospace, monospace; }
+dialog p { margin: .75rem 0; overflow-wrap: anywhere; }
+a.download { text-decoration: none; min-height: 2.35rem; padding: .55rem .8rem; border: 1px solid var(--border); border-radius: 6px; }
+#trace h3 { margin: 1rem 0 .4rem; }
+#review-history { padding-left: 1.3rem; font-size: .86rem; }
+#review-history li { margin-bottom: .4rem; overflow-wrap: anywhere; }
+@media (max-width: 740px) {
+  .work-grid { grid-template-columns: minmax(0, 1fr); }
+  .tray-list { display: flex; gap: .4rem; overflow-x: auto; }
+  .product { display: none; }
+  .topbar, .shell { padding-inline: .85rem; }
+}

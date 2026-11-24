@@ -1,0 +1,11 @@
+.timeline { background: #312722; margin: .8rem 0; border-radius: 8px; color: #fff6ea; padding: .8rem; }
+.axis { display: flex; justify-content: space-between; font: .75rem ui-monospace, monospace; color: #decbb9; padding-bottom: .5rem; }
+.lane { height: 1.05rem; position: relative; border-radius: 4px; background: #534437; overflow: hidden; }
+.segment { position: absolute; display: block; height: 100%; border-right: 1px solid #31272280; }
+.segment[data-state="in_band"], .swatch[data-state="in_band"] { background: #8dc09e; }
+.segment[data-state="out_of_band"], .swatch[data-state="out_of_band"] { background: #f28a63; }
+.segment[data-state="unknown"], .swatch[data-state="unknown"] { background: repeating-linear-gradient(135deg, #d8aa6a, #d8aa6a 4px, #8b6847 4px, #8b6847 8px); }
+.lane-label { margin: .65rem 0 .28rem; font-size: .82rem; }
+.legend { display: flex; flex-wrap: wrap; gap: .8rem; margin-top: .65rem; font-size: .77rem; color: #efdecf; }
+.legend span { display: inline-flex; align-items: center; gap: .3rem; }
+.swatch { display: inline-block; width: .65rem; height: .65rem; border-radius: 2px; }

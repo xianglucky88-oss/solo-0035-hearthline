@@ -1,0 +1,365 @@
+{
+  "name": "炉迹 · 连续炉料盘热历核对台",
+  "project_shape": "fullstack",
+  "modules": [
+    {
+      "id": "http",
+      "name": "请求和响应",
+      "paths": [
+        "hearthline/server.py",
+        "hearthline/routes.py",
+        "hearthline/response.py"
+      ]
+    },
+    {
+      "id": "intake",
+      "name": "收件格式及炉位约束",
+      "paths": [
+        "hearthline/intake.py",
+        "hearthline/fields.py",
+        "hearthline/plant.py",
+        "hearthline/recipe.py",
+        "hearthline/gate_log.py",
+        "hearthline/probe_log.py"
+      ]
+    },
+    {
+      "id": "archive",
+      "name": "归档目录与持久化",
+      "paths": [
+        "hearthline/archive.py",
+        "hearthline/store.py",
+        "hearthline/schema.sql",
+        "hearthline/codec.py"
+      ]
+    },
+    {
+      "id": "route",
+      "name": "驻留路线重建",
+      "paths": [
+        "hearthline/residency.py"
+      ]
+    },
+    {
+      "id": "collision",
+      "name": "炉位撞占",
+      "paths": [
+        "hearthline/occupancy.py"
+      ]
+    },
+    {
+      "id": "probe",
+      "name": "样点和校准时轴",
+      "paths": [
+        "hearthline/telemetry.py",
+        "hearthline/calibration.py",
+        "hearthline/window.py"
+      ]
+    },
+    {
+      "id": "evaluate",
+      "name": "工艺判定",
+      "paths": [
+        "hearthline/analysis.py",
+        "hearthline/stage.py"
+      ]
+    },
+    {
+      "id": "projection",
+      "name": "工作台和原始证据",
+      "paths": [
+        "hearthline/workbench.py",
+        "hearthline/evidence.py"
+      ]
+    },
+    {
+      "id": "review",
+      "name": "复核日志",
+      "paths": [
+        "hearthline/review_log.py"
+      ]
+    },
+    {
+      "id": "handoff",
+      "name": "交接冻结",
+      "paths": [
+        "hearthline/handoff.py"
+      ]
+    },
+    {
+      "id": "export",
+      "name": "签认清单下载",
+      "paths": [
+        "hearthline/export.py"
+      ]
+    },
+    {
+      "id": "replay",
+      "name": "存档复算",
+      "paths": [
+        "hearthline/replay.py"
+      ]
+    },
+    {
+      "id": "static",
+      "name": "前端静态资源送达",
+      "paths": [
+        "hearthline/static.py",
+        "web/index.html",
+        "web/base.css",
+        "web/layout.css",
+        "web/timeline.css"
+      ]
+    },
+    {
+      "id": "browser",
+      "name": "原生工作台交互",
+      "paths": [
+        "web/main.mjs",
+        "web/api.mjs",
+        "web/dom.mjs",
+        "web/import.mjs",
+        "web/labels.mjs",
+        "web/timeline.mjs",
+        "web/trays.mjs",
+        "web/trace.mjs",
+        "web/reviews.mjs",
+        "web/handoff.mjs"
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "id": "preview",
+      "name": "输入预检",
+      "entry": "POST /api/hearth/preview",
+      "module_ids": [
+        "http",
+        "intake",
+        "archive",
+        "evaluate"
+      ],
+      "steps": [
+        "校验输入",
+        "计算内存分析"
+      ],
+      "success": "返回料盘统计",
+      "failure": "无效炉次拒绝",
+      "verification": "检查错误输入并确认未落库"
+    },
+    {
+      "id": "archive",
+      "name": "归档炉次",
+      "entry": "POST /api/hearth/runs",
+      "module_ids": [
+        "http",
+        "intake",
+        "archive",
+        "evaluate"
+      ],
+      "steps": [
+        "生成规范证据",
+        "写入摘要和分析"
+      ],
+      "success": "相同内容重传复用同一炉次",
+      "failure": "同名异内容冲突",
+      "verification": "验证首次、重传、异内容和目录"
+    },
+    {
+      "id": "residency",
+      "name": "还原阶段路线",
+      "entry": "GET /api/hearth/runs/{run}",
+      "module_ids": [
+        "archive",
+        "route",
+        "evaluate",
+        "projection"
+      ],
+      "steps": [
+        "按盘配对过门票",
+        "对照配方阶段"
+      ],
+      "success": "闭合阶段按炉位及时间呈现",
+      "failure": "缺离位票标记阻断",
+      "verification": "检查闭合阶段和开驻留"
+    },
+    {
+      "id": "collision",
+      "name": "核对共用炉位",
+      "entry": "GET /api/hearth/runs/{run}",
+      "module_ids": [
+        "route",
+        "collision",
+        "evaluate",
+        "projection"
+      ],
+      "steps": [
+        "在同炉位寻找半开区间的交集",
+        "关联双方过门票"
+      ],
+      "success": "撞占双方可定位同一交集",
+      "failure": "疑似占用必须保留不确定性",
+      "verification": "验证 A31/A42 的实际交集和改造样例的疑似撞占"
+    },
+    {
+      "id": "calibration",
+      "name": "裁剪校准适用期",
+      "entry": "GET /api/hearth/runs/{run}/trace/{tray}",
+      "module_ids": [
+        "probe",
+        "evaluate",
+        "projection",
+        "archive"
+      ],
+      "steps": [
+        "从样点形成持有区间",
+        "按校准边界分割和换算"
+      ],
+      "success": "一段驻留可引用多张校准票",
+      "failure": "校准缺口记为未知",
+      "verification": "检查 A17 保温阶段的两段校准适用期"
+    },
+    {
+      "id": "coverage",
+      "name": "计算连续达标证据",
+      "entry": "GET /api/hearth/runs/{run}",
+      "module_ids": [
+        "probe",
+        "evaluate",
+        "projection",
+        "route"
+      ],
+      "steps": [
+        "按实际驻留裁剪测点时轴",
+        "累计有证秒数和最长连续带内秒数"
+      ],
+      "success": "展示符合口径的段级结论",
+      "failure": "未知或时长不足进入复核集",
+      "verification": "核对 A17、A24 和 A55 的不同结论"
+    },
+    {
+      "id": "trace",
+      "name": "回查原始证据",
+      "entry": "GET /api/hearth/runs/{run}/trace/{tray}",
+      "module_ids": [
+        "http",
+        "archive",
+        "projection",
+        "evaluate"
+      ],
+      "steps": [
+        "定位料盘的分析",
+        "回查采样、校准和关联过门票"
+      ],
+      "success": "撞占双方的原始票据可追溯",
+      "failure": "未知料盘返回 404",
+      "verification": "核对完整引用以及不存在的料盘"
+    },
+    {
+      "id": "review",
+      "name": "逐盘签认",
+      "entry": "POST /api/hearth/runs/{run}/reviews/{tray}",
+      "module_ids": [
+        "http",
+        "archive",
+        "review",
+        "projection"
+      ],
+      "steps": [
+        "校验当前修订及可签认性",
+        "追加复核动作"
+      ],
+      "success": "已签认料盘及版本更新",
+      "failure": "旧版本和未达标料盘拒签",
+      "verification": "用 A17 签认并验证旧修订及 A24 拒签"
+    },
+    {
+      "id": "handoff",
+      "name": "冻结交接清单",
+      "entry": "POST /api/hearth/runs/{run}/dispatch",
+      "module_ids": [
+        "http",
+        "archive",
+        "handoff",
+        "review"
+      ],
+      "steps": [
+        "核对当前签认修订",
+        "规范化并写入交接件"
+      ],
+      "success": "同版本重试返回同一交接件",
+      "failure": "旧版本或已冻结后变更被拒绝",
+      "verification": "并行变更后重预核，再验证幂等和锁定"
+    },
+    {
+      "id": "export",
+      "name": "下载交接证据",
+      "entry": "GET /api/hearth/runs/{run}/dispatch.csv",
+      "module_ids": [
+        "http",
+        "archive",
+        "handoff",
+        "export"
+      ],
+      "steps": [
+        "读取并核对冻结摘要",
+        "按阶段生成 CSV"
+      ],
+      "success": "JSON 与 CSV 共用冻结摘要",
+      "failure": "未冻结交接无下载件",
+      "verification": "核对 CSV 的三阶段、料盘及摘要"
+    },
+    {
+      "id": "replay",
+      "name": "独立复算存档",
+      "entry": "GET /api/hearth/runs/{run}/replay",
+      "module_ids": [
+        "http",
+        "archive",
+        "intake",
+        "evaluate",
+        "replay",
+        "handoff"
+      ],
+      "steps": [
+        "由原证据重跑分析",
+        "比对证据、分析及交接摘要"
+      ],
+      "success": "三个存档摘要一致",
+      "failure": "引擎版本冲突得到明确响应",
+      "verification": "检查样例复算结果全部一致"
+    },
+    {
+      "id": "web",
+      "name": "加载浏览器工作台",
+      "entry": "GET /",
+      "module_ids": [
+        "http",
+        "static",
+        "browser"
+      ],
+      "steps": [
+        "路由首页和静态模块",
+        "浏览器加载工作台资源"
+      ],
+      "success": "首页和样式、脚本由本机提供",
+      "failure": "服务不公开后端文件",
+      "verification": "请求首页、浏览器模块、CSS 和不可访问的内部文件"
+    }
+  ],
+  "complexity": {
+    "mechanisms": [
+      "state_machine",
+      "error_propagation",
+      "concurrency",
+      "versioning_audit",
+      "batch_transaction",
+      "export_freeze",
+      "time_semantics",
+      "idempotency",
+      "policy_rules",
+      "lineage",
+      "snapshot_consistency"
+    ]
+  }
+}

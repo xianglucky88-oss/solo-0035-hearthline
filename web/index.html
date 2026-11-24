@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>炉迹 · 连续炉料盘热历核对台</title>
+  <link rel="stylesheet" href="/base.css">
+  <link rel="stylesheet" href="/layout.css">
+  <link rel="stylesheet" href="/timeline.css">
+  <script type="module" src="/main.mjs"></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="炉迹首页"><i aria-hidden="true"></i>炉迹</a>
+    <span class="product">连续炉料盘热历核对台</span>
+    <button id="open-import" type="button" class="primary push">导入炉次</button>
+  </header>
+  <main class="shell">
+    <p id="notice" role="status" aria-live="polite" hidden></p>
+    <section class="toolbar" aria-label="炉次操作">
+      <div><label for="runs">炉次</label> <select id="runs"></select> <button id="older" type="button" hidden>较早炉次</button></div>
+      <div class="actions"><button id="replay" type="button" disabled>复算存档</button><button id="handoff" type="button" disabled>交接清单</button></div>
+    </section>
+    <section id="blank" class="empty" hidden>
+      <h1>还没有归档炉次</h1><p>导入过门记录、固定测点和校准凭证，开始核对料盘的在炉热历。</p>
+      <button id="demo" type="button" class="primary">打开示例资料</button>
+    </section>
+    <section id="workspace" hidden>
+      <div class="workspace-title"><div><p class="context" id="recipe"></p><h1 id="run-title"></h1></div><div id="counts" class="counts"></div></div>
+      <div class="work-grid">
+        <aside class="panel tray-panel"><h2>料盘</h2><ul id="trays" class="tray-list"></ul></aside>
+        <article class="panel detail">
+          <div class="panel-heading"><div><p class="context">驻留时间轴</p><h2 id="tray-title"></h2></div><span id="tray-status"></span></div>
+          <div id="timeline" class="timeline"></div>
+          <div class="table-wrap"><table><thead><tr><th>工艺阶段</th><th>炉位</th><th>驻留范围</th><th>覆盖</th><th>最长达标 / 要求</th><th>结果</th></tr></thead><tbody id="stages"></tbody></table></div>
+          <ul id="issues" class="issues"></ul>
+          <details id="trace-section"><summary>查看原始证据</summary><div id="trace"></div></details>
+          <section class="review-box">
+            <div class="panel-heading"><h2>料盘签认</h2><span id="review-status"></span></div>
+            <form id="review-form">
+              <label>复核人<input name="reviewer" maxlength="40" required autocomplete="off"></label>
+              <label class="grow">依据<input name="note" maxlength="200" required autocomplete="off"></label>
+              <div class="actions"><button value="hold">暂缓</button><button class="primary" value="accept">签认通过</button></div>
+            </form>
+            <details><summary>本盘签认记录</summary><ol id="review-history"></ol></details>
+          </section>
+        </article>
+      </div>
+    </section>
+  </main>
+  <dialog id="import-dialog" aria-labelledby="import-title">
+    <div class="panel-heading"><h2 id="import-title">导入炉次资料</h2><button type="button" data-close="import-dialog">关闭</button></div>
+    <label for="upload">本地 JSON 文件</label><input id="upload" type="file" accept=".json,application/json">
+    <label for="payload">炉次 JSON</label><textarea id="payload" rows="12" spellcheck="false"></textarea>
+    <p id="import-result" role="status" aria-live="polite"></p>
+    <div class="actions"><button id="load-example" type="button">载入示例</button><button id="preview" type="button">预检</button><button id="ingest" type="button" class="primary">保存到炉次档案</button></div>
+  </dialog>
+  <dialog id="handoff-dialog" aria-labelledby="handoff-title">
+    <div class="panel-heading"><h2 id="handoff-title">交接清单</h2><button type="button" data-close="handoff-dialog">关闭</button></div>
+    <div id="handoff-body"></div>
+    <p id="handoff-result" role="status" aria-live="polite"></p>
+    <div class="actions" id="handoff-actions"></div>
+  </dialog>
+</body>
+</html>

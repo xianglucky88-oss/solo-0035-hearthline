@@ -1,0 +1,63 @@
+{
+  "language": "Python + HTML + CSS + JavaScript",
+  "project_shape": "fullstack",
+  "testing": "deferred",
+  "source_extensions": [
+    ".py",
+    ".sql",
+    ".html",
+    ".css",
+    ".mjs"
+  ],
+  "build_command": "python3 -B -m tools.check_source",
+  "workflow_checks": [
+    {
+      "workflow_id": "preview",
+      "command": "python3 -B -m tools.smoke --through preview"
+    },
+    {
+      "workflow_id": "archive",
+      "command": "python3 -B -m tools.smoke --through archive"
+    },
+    {
+      "workflow_id": "residency",
+      "command": "python3 -B -m tools.smoke --through residency"
+    },
+    {
+      "workflow_id": "collision",
+      "command": "python3 -B -m tools.smoke --through collision"
+    },
+    {
+      "workflow_id": "calibration",
+      "command": "python3 -B -m tools.smoke --through calibration"
+    },
+    {
+      "workflow_id": "coverage",
+      "command": "python3 -B -m tools.smoke --through coverage"
+    },
+    {
+      "workflow_id": "trace",
+      "command": "python3 -B -m tools.smoke --through trace"
+    },
+    {
+      "workflow_id": "review",
+      "command": "python3 -B -m tools.smoke --through review"
+    },
+    {
+      "workflow_id": "handoff",
+      "command": "python3 -B -m tools.smoke --through handoff"
+    },
+    {
+      "workflow_id": "export",
+      "command": "python3 -B -m tools.smoke --through export"
+    },
+    {
+      "workflow_id": "replay",
+      "command": "python3 -B -m tools.smoke --through replay"
+    },
+    {
+      "workflow_id": "web",
+      "command": "python3 -B -m tools.smoke --through web"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+:root {
+  color-scheme: light;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  color: #261f1b;
+  background: #f5f0e8;
+  --surface: #fffcf6;
+  --border: #ddd2c2;
+  --muted: #675e54;
+  --copper: #8e381e;
+  --anchor: #332923;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+[hidden] { display: none !important; }
+a { color: var(--copper); }
+button, input, select, textarea { font: inherit; }
+button, select, input, textarea {
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: .55rem .8rem;
+  min-width: 0;
+  min-height: 2.35rem;
+}
+button { cursor: pointer; }
+button:hover:enabled, a.download:hover { border-color: var(--copper); }
+button:disabled { opacity: .5; cursor: default; }
+:focus-visible { outline: 2px solid #aa4e28; outline-offset: 3px; }
+.primary { background: var(--copper); color: #fffaf4; border-color: var(--copper); }
+.primary:hover:enabled { background: #772b15; }
+h1, h2, h3, p { margin: 0; }
+h1 { font-size: clamp(1.8rem, 4vw, 2.55rem); letter-spacing: -.035em; }
+h2 { font-size: 1.16rem; }
+h3 { font-size: .97rem; }
+.context, small { color: var(--muted); font-size: .81rem; }
+.context { margin-bottom: .3rem; }
+.actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.table-wrap { overflow: auto; }
+table { width: 100%; border-collapse: collapse; font-size: .86rem; text-align: left; }
+th, td { padding: .66rem .55rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { font-weight: 600; color: var(--muted); }
+summary { cursor: pointer; font-size: .9rem; font-weight: 600; }
+details { margin-top: .9rem; }
+.badge { display: inline-block; padding: .19rem .52rem; border-radius: 4px; font-size: .79rem; white-space: nowrap; }
+.badge[data-tone="ready"] { color: #205740; background: #d8efe0; }
+.badge[data-tone="inspect"] { color: #754411; background: #f7e6bd; }
+.badge[data-tone="blocked"] { color: #872c23; background: #f6ded7; }
+.badge[data-tone="neutral"] { color: #635449; background: #eee7db; }
