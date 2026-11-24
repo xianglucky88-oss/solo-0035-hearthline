@@ -5,7 +5,7 @@ import io
 import json
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from threading import Thread
+from threading import Barrier, Thread
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
@@ -14,7 +14,7 @@ from hearthline.store import Store
 
 
 WORKFLOWS = ('preview', 'archive', 'residency', 'collision', 'calibration', 'coverage',
-             'trace', 'review', 'handoff', 'export', 'replay', 'web')
+             'trace', 'review', 'handoff', 'batch', 'export', 'replay', 'web')
 
 
 class Client:
@@ -31,8 +31,38 @@ class Client:
             response = error
         with response:
             data = response.read()
-            assert response.status == status, (path, response.status, data[:500])
+            if response.status != status:
+                raise AssertionError((path, response.status, data[:500]))
             return data if raw else json.loads(data)
+
+
+def multi_run(run_id, trays):
+    """构造全部料盘证据齐备、互不撞占的合成炉次，用于分批交接。"""
+    slots = [
+        {'id': 'P1', 'zone': 'warm', 'probe': 'T-P1'},
+        {'id': 'S1', 'zone': 'soak', 'probe': 'T-S1'},
+        {'id': 'F1', 'zone': 'finish', 'probe': 'T-F1'},
+    ]
+    recipe = {'id': 'R-multi', 'stages': [
+        {'zone': 'warm', 'label': '预热', 'min_tenth': 5000, 'max_tenth': 5200, 'min_contiguous_s': 12},
+        {'zone': 'soak', 'label': '保温', 'min_tenth': 6900, 'max_tenth': 7100, 'min_contiguous_s': 15},
+        {'zone': 'finish', 'label': '均温', 'min_tenth': 3300, 'max_tenth': 3500, 'min_contiguous_s': 8}]}
+    schedule = {'P1': (0, 20), 'S1': (25, 45), 'F1': (50, 70)}
+    events = []
+    for index, tray in enumerate(trays):
+        shift = index * 80
+        for slot, (start, end) in schedule.items():
+            events += [
+                {'id': f'{tray}-{slot}-in', 'tray': tray, 'slot': slot, 'at': start + shift, 'kind': 'enter'},
+                {'id': f'{tray}-{slot}-out', 'tray': tray, 'slot': slot, 'at': end + shift, 'kind': 'leave'}]
+    horizon = 80 * len(trays) + 80
+    readings, calibrations = [], []
+    for probe, tenth in (('T-P1', 5100), ('T-S1', 7000), ('T-F1', 3400)):
+        for at in range(0, horizon + 1, 5):
+            readings.append({'id': f'{probe}-{at:04d}', 'probe': probe, 'at': at, 'tenth': tenth, 'valid': True})
+        calibrations.append({'id': f'{probe}-c1', 'probe': probe, 'from': 0, 'to': horizon, 'offset_tenth': 0})
+    return {'id': run_id, 'horizon_s': horizon, 'max_gap_s': 10, 'recipe': recipe, 'slots': slots,
+            'trays': trays, 'events': events, 'readings': readings, 'calibrations': calibrations}
 
 
 def check(client):
@@ -95,24 +125,126 @@ def check(client):
     assert client(run)['reviews']['current']['A17']['action'] == 'accept'
     yield 'review'
 
+    # 整炉冻结沿用旧入口与 revision 乐观锁；冻结后整炉（含未入件盘）停止签认。
     prepared = client(run + '/handoff')
     assert [entry['id'] for entry in prepared['included']] == ['A17']
     client(run + '/reviews/A24', {**review, 'revision': 1, 'action': 'hold'}, status=201)
     client(run + '/dispatch', {'revision': prepared['revision']}, status=409)
     frozen = client(run + '/dispatch', {'revision': 2})
+    assert frozen['mode'] == 'whole' and frozen['batch'] == 'whole-run'
     assert frozen == client(run + '/dispatch', {'revision': 2})
     assert frozen == client(run + '/handoff')
     client(run + '/reviews/A17', {**review, 'revision': 2}, status=409)
+    client(run + '/reviews/A55', {**review, 'revision': 2, 'action': 'hold'}, status=409)
+    # 整炉冻结的炉次不能再分批交接。
+    client(run + '/handoff/precheck', {'batch': 'B-9', 'trays': ['A17']}, status=409)
+    client(run + '/batches', {'batch': 'B-9', 'precheck_hash': '0' * 64}, status=409)
     yield 'handoff'
 
-    downloaded = client(run + '/dispatch.json')
-    records = list(csv.DictReader(io.StringIO(client(run + '/dispatch.csv', raw=True).decode('utf-8-sig'))))
-    assert frozen == downloaded and len(records) == 3
-    assert {(row['料盘'], row['交接摘要']) for row in records} == {('A17', frozen['dispatch_hash'])}
+    # ---- 分批交接：独立炉次，三个料盘均可签认通过 ----
+    multi_source = multi_run('MULTI-9', ['B1', 'B2', 'B3'])
+    multi = f'runs/{multi_source["id"]}'
+    assert all(tray['state'] == 'ready' for tray in client('preview', multi_source)['trays'])
+    client('runs', multi_source, status=201)
+    for index, tray in enumerate(('B1', 'B2', 'B3'), start=1):
+        client(multi + f'/reviews/{tray}', {**review, 'revision': index - 1}, status=201)
+    projection = client(multi + '/handoff')
+    assert [entry['id'] for entry in projection['included']] == ['B1', 'B2', 'B3']
+    assert projection['dispatches'] == [] and projection['dispatched'] == {}
+
+    # 预核只接受有生效通过签认且未交接的盘。
+    client(multi + '/handoff/precheck', {'batch': 'BX', 'trays': ['B1', 'NOPE']}, status=404)
+    client(multi + '/handoff/precheck', {'batch': 'BX', 'trays': ['B1', 'B1']}, status=400)
+    pre_one = client(multi + '/handoff/precheck', {'batch': 'B-ONE', 'trays': ['B1']}, status=201)
+    assert [entry['id'] for entry in pre_one['included']] == ['B1']
+    assert pre_one['precheck_hash'] and pre_one['mode'] == 'batch'
+    pre_two = client(multi + '/handoff/precheck', {'batch': 'B-TWO', 'trays': ['B2', 'B3']}, status=201)
+
+    # 其他盘补签（B2 暂缓再通过）不影响 B-ONE 的预核；B1 若暂缓再通过则须重新预核。
+    client(multi + '/reviews/B2', {**review, 'revision': 3, 'action': 'hold'}, status=201)
+    client(multi + '/reviews/B2', {**review, 'revision': 4, 'action': 'accept'}, status=201)
+    assert client(multi + '/handoff/precheck', {'batch': 'B-ONE', 'trays': ['B1']}, status=201)['precheck_hash'] \
+        == pre_one['precheck_hash']
+    client(multi + '/reviews/B1', {**review, 'revision': 5, 'action': 'hold'}, status=201)
+    client(multi + '/reviews/B1', {**review, 'revision': 6, 'action': 'accept'}, status=201)
+    client(multi + '/batches', {'batch': 'B-ONE', 'precheck_hash': pre_one['precheck_hash']}, status=409)
+    pre_one = client(multi + '/handoff/precheck', {'batch': 'B-ONE', 'trays': ['B1']}, status=201)
+
+    # 无预核、错预核摘要、空选盘均拒绝。
+    client(multi + '/batches', {'batch': 'B-GHOST', 'precheck_hash': '0' * 64}, status=409)
+    client(multi + '/batches', {'batch': 'B-ONE', 'precheck_hash': 'f' * 64}, status=409)
+
+    # 并发两批争同一盘 B2：只许一批成功；败批独有的 B3 不被占用。
+    rival = client(multi + '/handoff/precheck', {'batch': 'B-RIVAL', 'trays': ['B2']}, status=201)
+    # 冻结前再做一个同盘、同内容的备用预核，供“同批号换新预核”拒绝断言使用。
+    spare = client(multi + '/handoff/precheck', {'batch': 'B-SPARE', 'trays': ['B1']}, status=201)
+    barrier = Barrier(2)
+    outcomes = {}
+
+    def freeze_batch(batch, token, key):
+        barrier.wait()
+        try:
+            outcomes[key] = client(multi + '/batches', {'batch': batch, 'precheck_hash': token})
+        except AssertionError as exc:
+            outcomes[key] = exc.args[0][1]
+        except BaseException as exc:  # pragma: no cover - 暴露并发线程内的真实错误
+            outcomes[key] = f'ERROR: {type(exc).__name__}: {exc}'
+
+    threads = [
+        Thread(target=freeze_batch, args=('B-TWO', pre_two['precheck_hash'], 'two')),
+        Thread(target=freeze_batch, args=('B-RIVAL', rival['precheck_hash'], 'rival'))]
+    for worker in threads:
+        worker.start()
+    for worker in threads:
+        worker.join()
+    assert set(outcomes) == {'two', 'rival'}, outcomes
+    statuses = {key: (200 if isinstance(value, dict) else value) for key, value in outcomes.items()}
+    assert sorted(statuses.values()) == [200, 409], outcomes
+    winner = next(key for key, code in statuses.items() if code == 200)
+    after = client(multi + '/handoff')
+    if winner == 'two':
+        # B-TWO 拿到 B2、B3；败批 B-RIVAL 不落任何盘，B3 已被占用。
+        assert after['dispatched'] == {'B2': 'B-TWO', 'B3': 'B-TWO'}
+        client(multi + '/batches', {'batch': 'B-RIVAL', 'precheck_hash': rival['precheck_hash']}, status=409)
+    else:
+        # B-RIVAL 只拿到 B2；败批 B-TWO 独有的 B3 不被占用，可另批交接。
+        assert after['dispatched'] == {'B2': 'B-RIVAL'}
+        client(multi + '/batches', {'batch': 'B-TWO', 'precheck_hash': pre_two['precheck_hash']}, status=409)
+        b3 = client(multi + '/handoff/precheck', {'batch': 'B-THREE', 'trays': ['B3']}, status=201)
+        client(multi + '/batches', {'batch': 'B-THREE', 'precheck_hash': b3['precheck_hash']})
+
+    # B1 单独成批交接；同批号 + 原预核重交返回原件，配另一预核（即便内容相同）一律拒绝。
+    one = client(multi + '/batches', {'batch': 'B-ONE', 'precheck_hash': pre_one['precheck_hash']})
+    assert [entry['id'] for entry in one['included']] == ['B1']
+    again = client(multi + '/batches', {'batch': 'B-ONE', 'precheck_hash': pre_one['precheck_hash']})
+    assert again == one
+    client(multi + '/batches', {'batch': 'B-ONE', 'precheck_hash': spare['precheck_hash']}, status=409)
+
+    # 每盘只能交接一次，交接后停止追加签认；未交接盘在本场景已全部交接。
+    client(multi + '/reviews/B1', {**review, 'revision': 6, 'action': 'hold'}, status=409)
+    final = client(multi + '/handoff')
+    assert set(final['dispatched']) == {'B1', 'B2', 'B3'}
+    assert final['included'] == []
+    yield 'batch'
+
+    # ---- 下载：只列本批盘，批号进文件名；整炉件走旧路径 ----
+    whole_json = client(run + '/dispatch.json')
+    whole_rows = list(csv.DictReader(io.StringIO(client(run + '/dispatch.csv', raw=True).decode('utf-8-sig'))))
+    assert whole_json == frozen and {row['料盘'] for row in whole_rows} == {'A17'}
+    batch_json = client(multi + '/batches/B-ONE/json')
+    assert [entry['id'] for entry in batch_json['included']] == ['B1']
+    batch_rows = list(csv.DictReader(io.StringIO(
+        client(multi + '/batches/B-ONE/csv', raw=True).decode('utf-8-sig'))))
+    assert {row['料盘'] for row in batch_rows} == {'B1'} and all(row['批号'] == 'B-ONE' for row in batch_rows)
+    assert client(multi + '/batches/B-GHOST/json', status=404)['error']
     yield 'export'
 
+    # 复算沿用原始炉次证据及各批采用的签认；补签和后续交接不影响旧件。
     rechecked = client(run + '/replay')
     assert all(rechecked[key] is True for key in ('ok', 'evidence_match', 'analysis_match', 'dispatch_match'))
+    multi_check = client(multi + '/replay')
+    assert multi_check['ok'] and multi_check['dispatch_match'] is True
+    assert all(item['match'] for item in multi_check['dispatch_checks'])
     assert client(run + '/source')['id'] == source['id']
     yield 'replay'
 

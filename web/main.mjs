@@ -81,7 +81,13 @@ runs.addEventListener('change', task(async () => selectRun(runs.value)));
 get('older').addEventListener('click', task(async () => loadRuns(undefined, true)));
 get('replay').addEventListener('click', task(async () => {
   const result = await read(`${runPath(current.report.id)}/replay`);
-  note(notice, result.ok ? '原始证据和分析结果复算一致。' + (result.dispatch_match ? '交接摘要一致。' : '') : '存档复算出现差异。', !result.ok);
+  const batchCount = result.dispatch_checks?.length ?? 0;
+  const handoffNote = result.dispatch_match
+    ? `${batchCount} 个交接件摘要一致。`
+    : (batchCount ? '交接件复算出现差异。' : '');
+  note(notice, result.ok
+    ? `原始证据和分析结果复算一致。${handoffNote}`
+    : '存档复算出现差异。', !result.ok);
 }));
 get('handoff').addEventListener('click', task(async () => {
   const id = current.report.id;

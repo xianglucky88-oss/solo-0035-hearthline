@@ -24,8 +24,11 @@ def append_review(store, run_id, tray_id, value):
         tray = next((tray for tray in report['trays'] if tray['id'] == tray_id), None)
         if tray is None:
             raise Problem('没有找到该料盘', 404)
-        if db.execute('SELECT 1 FROM dispatch WHERE run_id=?', (run_id,)).fetchone():
-            raise Problem('炉次交接件已冻结', 409)
+        from .handoff import dispatched_trays, whole_dispatch
+        if whole_dispatch(db, run_id) is not None:
+            raise Problem('该炉次已整炉冻结，停止追加签认', 409)
+        if tray_id in dispatched_trays(db, run_id):
+            raise Problem('该料盘已随批次交接，停止追加签认', 409)
         state = review_state(db, run_id)
         if expected != state['revision']:
             raise Problem('签认记录已经变化，请刷新后重试', 409)

@@ -275,7 +275,7 @@
     },
     {
       "id": "handoff",
-      "name": "冻结交接清单",
+      "name": "整炉冻结交接",
       "entry": "POST /api/hearth/runs/{run}/dispatch",
       "module_ids": [
         "http",
@@ -285,16 +285,37 @@
       ],
       "steps": [
         "核对当前签认修订",
-        "规范化并写入交接件"
+        "整炉规范化并写入不可变交接件",
+        "冻结全部料盘（含未入件盘）"
       ],
-      "success": "同版本重试返回同一交接件",
-      "failure": "旧版本或已冻结后变更被拒绝",
-      "verification": "并行变更后重预核，再验证幂等和锁定"
+      "success": "同版本重试返回同一整炉交接件",
+      "failure": "旧版本、已冻结或已有分批件时拒绝",
+      "verification": "并行变更后重预核，再验证幂等、整炉锁定与分批互斥"
+    },
+    {
+      "id": "batch",
+      "name": "分批预核与冻结",
+      "entry": "POST /api/hearth/runs/{run}/handoff/precheck 与 /batches",
+      "module_ids": [
+        "http",
+        "archive",
+        "handoff",
+        "review",
+        "projection"
+      ],
+      "steps": [
+        "从生效通过签认中选盘生成批号预核并固化各盘签认代次",
+        "确认时事务复核选盘未交接且签认仍为预核那条",
+        "整批写入不可变交接件并占用所选盘"
+      ],
+      "success": "同批号同预核重交返回原件，分批下载只含本批盘",
+      "failure": "盘已交接、签认代次变化、复用批号改盘或换新预核均拒绝",
+      "verification": "验证补签隔离、暂缓后重签须重预核、并发争盘仅一批成功且败批不占盘"
     },
     {
       "id": "export",
       "name": "下载交接证据",
-      "entry": "GET /api/hearth/runs/{run}/dispatch.csv",
+      "entry": "GET /api/hearth/runs/{run}/batches/{batch}/csv",
       "module_ids": [
         "http",
         "archive",
@@ -303,11 +324,11 @@
       ],
       "steps": [
         "读取并核对冻结摘要",
-        "按阶段生成 CSV"
+        "按批次只列本批料盘阶段生成 CSV"
       ],
       "success": "JSON 与 CSV 共用冻结摘要",
       "failure": "未冻结交接无下载件",
-      "verification": "核对 CSV 的三阶段、料盘及摘要"
+      "verification": "核对整炉与分批 CSV 的料盘范围、批号及摘要"
     },
     {
       "id": "replay",

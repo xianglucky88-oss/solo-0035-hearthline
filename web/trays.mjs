@@ -9,14 +9,18 @@ export function drawTrays(run, trayId, select) {
   get('counts').replaceChildren(
     badge('ready', `${report.trays.filter((tray) => reviews.current[tray.id]?.action === 'accept').length} 盘已签认`),
     badge('blocked', `${report.conflicts.length} 处撞占`),
-    badge('neutral', run.dispatch_hash ? '交接件已冻结' : `${report.trays.length} 个料盘`),
+    badge('neutral', run.whole_frozen
+      ? '整炉交接件已冻结'
+      : `${Object.keys(run.dispatched ?? {}).length} / ${report.trays.length} 盘已交接`),
   );
   get('trays').replaceChildren(...report.trays.map((tray) => {
     const item = el('li');
     const button = el('button');
     button.type = 'button';
     button.setAttribute('aria-current', String(tray.id === trayId));
-    button.append(el('strong', tray.id), badge(reviews.current[tray.id]?.action ?? tray.state));
+    const batch = run.dispatched?.[tray.id];
+    button.append(el('strong', tray.id),
+      batch ? badge('neutral', `已交接 · ${batch}`) : badge(reviews.current[tray.id]?.action ?? tray.state));
     button.addEventListener('click', () => select(tray.id));
     item.append(button);
     return item;

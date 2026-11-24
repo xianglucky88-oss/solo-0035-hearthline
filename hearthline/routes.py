@@ -37,12 +37,27 @@ def dispatch(store, method, path, query, body):
     action = parts[2:]
     if method == 'POST' and len(action) == 2 and action[0] == 'reviews':
         return json_reply(review_log.append_review(store, run_id, action[1], body()), 201)
+    if method == 'POST' and action == ['handoff', 'precheck']:
+        return json_reply(handoff.precheck(store, run_id, body()), 201)
     if method == 'POST' and action == ['dispatch']:
+        return json_reply(handoff.freeze_whole(store, run_id, body()))
+    if method == 'POST' and action == ['batches']:
         return json_reply(handoff.freeze(store, run_id, body()))
     if method != 'GET':
         raise Problem('没有找到该入口', 404)
     with store.connection() as db:
         return read_run(db, run_id, action)
+
+
+def _download(db, run_id, batch_id, suffix):
+    content = handoff.get_dispatch(db, run_id, batch_id)
+    if content is None:
+        raise Problem('该交接件尚未冻结', 404)
+    label = handoff.WHOLE_BATCH if batch_id == handoff.WHOLE_BATCH else batch_id
+    attachment = {'Content-Disposition': f'attachment; filename="{run_id}-{label}-{suffix}"'}
+    if suffix == 'csv':
+        return Reply(as_csv(content), 'text/csv; charset=utf-8', headers=attachment)
+    return json_reply(content, **attachment)
 
 
 def read_run(db, run_id, action):
@@ -55,15 +70,16 @@ def read_run(db, run_id, action):
         return json_reply(evidence.trace_tray(archive.read_document(row, 'analysis'),
                                              archive.read_document(row, 'evidence'), action[1]))
     if action == ['handoff']:
-        return json_reply(handoff.current_dispatch(db, run_id) or handoff.prepare(db, run_id))
+        whole = handoff.whole_dispatch(db, run_id)
+        return json_reply(whole if whole is not None else handoff.prepare(db, run_id))
     if action == ['replay']:
         return json_reply(replay.verify(db, run_id))
     if action in (['dispatch.json'], ['dispatch.csv']):
-        content = handoff.current_dispatch(db, run_id)
-        if content is None:
-            raise Problem('炉次尚未冻结交接件', 404)
-        attachment = {'Content-Disposition': f'attachment; filename="{run_id}-{action[0]}"'}
-        if action == ['dispatch.csv']:
-            return Reply(as_csv(content), 'text/csv; charset=utf-8', headers=attachment)
-        return json_reply(content, **attachment)
+        return _download(db, run_id, handoff.WHOLE_BATCH, action[0].split('.')[1])
+    if len(action) == 3 and action[0] == 'batches':
+        batch_id = ident(action[1], '交接批号')
+        suffix = action[2]
+        if suffix not in ('json', 'csv'):
+            raise Problem('没有找到该入口', 404)
+        return _download(db, run_id, batch_id, suffix)
     raise Problem('没有找到该入口', 404)

@@ -48,6 +48,10 @@
       "command": "python3 -B -m tools.smoke --through handoff"
     },
     {
+      "workflow_id": "batch",
+      "command": "python3 -B -m tools.smoke --through batch"
+    },
+    {
       "workflow_id": "export",
       "command": "python3 -B -m tools.smoke --through export"
     },

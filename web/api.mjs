@@ -1,6 +1,8 @@
 const prefix = '/api/hearth/';
 export const runPath = (id) => `runs/${encodeURIComponent(id)}`;
 export const downloadPath = (id, suffix) => `${prefix}${runPath(id)}/dispatch.${suffix}`;
+export const batchDownloadPath = (id, batch, suffix) =>
+  `${prefix}${runPath(id)}/batches/${encodeURIComponent(batch)}/${suffix}`;
 
 async function request(path, init) {
   const reply = await fetch(prefix + path, init);
