@@ -42,18 +42,70 @@ def dispatch(store, method, path, query, body):
     if method != 'GET':
         raise Problem('没有找到该入口', 404)
     with store.connection() as db:
-        return read_run(db, run_id, action)
+        return read_run(db, run_id, action, query)
 
 
-def read_run(db, run_id, action):
+def read_run(db, run_id, action, query=''):
+    query_params = parse_qs(query, keep_blank_values=True)
+    piece_query = (query_params.get('piece') or query_params.get('workpiece') or
+                   query_params.get('piece_id') or query_params.get('workpiece_id') or [None])[0]
     if not action:
         return json_reply(workbench.load(db, run_id))
     if action == ['source']:
-        return json_reply(archive.read_document(archive.get_run(db, run_id), 'evidence'))
+        document = archive.read_document(archive.get_run(db, run_id), 'evidence')
+        document['pieces'] = document.get('workpieces', [])
+        document['handovers'] = document.get('transfers', [])
+        return json_reply(document)
     if len(action) == 2 and action[0] == 'trace':
         row = archive.get_run(db, run_id)
-        return json_reply(evidence.trace_tray(archive.read_document(row, 'analysis'),
-                                             archive.read_document(row, 'evidence'), action[1]))
+        report = archive.read_document(row, 'analysis')
+        source = archive.read_document(row, 'evidence')
+        if piece_query:
+            result = evidence.trace_piece(report, source, piece_query)
+            if result is None:
+                raise Problem('没有找到该工件', 404)
+            return json_reply(result)
+        return json_reply(evidence.trace_tray(report, source, action[1]))
+    if action in (['pieces'], ['workpieces']):
+        row = archive.get_run(db, run_id)
+        report = archive.read_document(row, 'analysis')
+        return json_reply({'pieces': report.get('workpieces', []),
+                           'workpieces': report.get('workpieces', [])})
+    if action in (['lineage'], ['transfers'], ['handovers']):
+        row = archive.get_run(db, run_id)
+        report = archive.read_document(row, 'analysis')
+        return json_reply({
+            'transfers': report.get('transfers', []),
+            'handovers': report.get('handovers', report.get('transfers', [])),
+            'retired_trays': report.get('retired_trays', []),
+            'workpieces': report.get('workpieces', []),
+            'pieces': report.get('pieces', report.get('workpieces', [])),
+        })
+    piece_lookup = None
+    if len(action) == 2 and action[0] in ('piece', 'pieces', 'workpiece', 'workpieces',
+                                          'lineage', 'lineages', 'trace-piece',
+                                          'trace-workpiece', 'piece-trace',
+                                          'workpiece-trace'):
+        piece_lookup = action[1]
+    elif len(action) == 3 and action[0] in ('pieces', 'workpieces', 'piece', 'workpiece') and \
+            action[2] in ('trace', 'evidence'):
+        piece_lookup = action[1]
+    elif len(action) == 3 and action[0] == 'trace' and \
+            action[1] in ('piece', 'pieces', 'workpiece', 'workpieces'):
+        piece_lookup = action[2]
+    if piece_lookup is not None:
+        row = archive.get_run(db, run_id)
+        report = archive.read_document(row, 'analysis')
+        source = archive.read_document(row, 'evidence')
+        result = evidence.trace_piece(report, source, piece_lookup)
+        if result is None and action[0] in ('lineage', 'lineages'):
+            transfer = next((item for item in report.get('transfers', [])
+                             if item['id'] == piece_lookup), None)
+            if transfer is not None:
+                return json_reply({'transfer': transfer, 'handoff': transfer})
+        if result is None:
+            raise Problem('没有找到该工件', 404)
+        return json_reply(result)
     if action == ['handoff']:
         return json_reply(handoff.current_dispatch(db, run_id) or handoff.prepare(db, run_id))
     if action == ['replay']:

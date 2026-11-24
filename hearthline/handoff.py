@@ -23,11 +23,22 @@ def prepare(db, run_id):
     for tray in report['trays']:
         decision = state['current'].get(tray['id'])
         if tray['state'] == 'ready' and decision and decision['action'] == 'accept':
-            included.append({'id': tray['id'], 'decision': decision, 'stages': tray['stages']})
+            included.append({'id': tray['id'], 'decision': decision, 'stages': tray['stages'],
+                             'workpiece_ids': tray.get('workpiece_ids', []),
+                             'pieces': tray.get('pieces', [])})
         else:
-            excluded.append({'id': tray['id'], 'state': tray['state'], 'decision': decision})
+            excluded.append({'id': tray['id'], 'state': tray['state'], 'decision': decision,
+                             'issues': tray.get('issues', []),
+                             'workpiece_ids': tray.get('workpiece_ids', []),
+                             'missing_evidence_pieces': tray.get('missing_evidence_pieces', []),
+                             'missing_evidence_workpieces': tray.get(
+                                 'missing_evidence_workpieces',
+                                 tray.get('missing_evidence_pieces', [])),
+                             'unready_pieces': tray.get('unready_pieces', [])})
     return {'run': run_id, 'recipe': report['recipe'], 'engine': report['engine'], 'revision': state['revision'],
             'evidence_hash': entry['evidence_hash'], 'analysis_hash': entry['analysis_hash'],
+            'transfers': report.get('transfers', []),
+            'workpieces': report.get('workpieces', []),
             'included': included, 'excluded': excluded}
 
 

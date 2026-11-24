@@ -34,7 +34,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 reply = dispatch(self.server.store, method, uri.path, uri.query, self.read_json)
         except Problem as exc:
-            reply = json_reply({'error': str(exc)}, exc.status)
+            reply = json_reply({'error': str(exc), **exc.details}, exc.status)
         except (ValueError, TimeoutError):
             reply = json_reply({'error': '请求格式错误或未完整接收'}, 400)
         except sqlite3.OperationalError as exc:

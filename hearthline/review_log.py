@@ -30,7 +30,21 @@ def append_review(store, run_id, tray_id, value):
         if expected != state['revision']:
             raise Problem('签认记录已经变化，请刷新后重试', 409)
         if action == 'accept' and tray['state'] != 'ready':
-            raise Problem('路线或热历证据未就绪，当前不能签认通过', 409)
+            details = {
+                'tray': tray_id,
+                'state': tray['state'],
+                'missing_evidence_pieces': tray.get('missing_evidence_pieces', []),
+                'missing_evidence_workpieces': tray.get('missing_evidence_workpieces',
+                                                        tray.get('missing_evidence_pieces', [])),
+                'missing_evidence_piece_ids': tray.get('missing_evidence_piece_ids',
+                                                       tray.get('missing_evidence_pieces', [])),
+                'missing_evidence_workpiece_ids': tray.get(
+                    'missing_evidence_workpiece_ids', tray.get('missing_evidence_pieces', [])),
+                'deficient_pieces': tray.get('deficient_pieces',
+                                             tray.get('unready_pieces', [])),
+                'unready_pieces': tray.get('unready_pieces', []),
+            }
+            raise Problem('路线、工件热历证据或交接核验未就绪，当前不能签认通过', 409, details)
         revision = expected + 1
         db.execute('INSERT INTO review_event VALUES(?,?,?,?,?,?)', (run_id, revision, tray_id, action, reviewer, note))
         return {'revision': revision, 'tray': tray_id, 'action': action, 'reviewer': reviewer, 'note': note}

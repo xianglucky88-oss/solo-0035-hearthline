@@ -14,6 +14,8 @@
 | `recipe` | `id` 和有序 `stages`。每阶有唯一 `zone`、`label`、闭区间温度带 `min_tenth` 与 `max_tenth`、正整数 `min_contiguous_s`。最多 8 个阶段。 |
 | `slots` | 每项 `id`、`zone`、`probe`。各炉位及各固定测点唯一，每个工艺阶段至少一个炉位，最多 32 个。 |
 | `trays` | 1 至 100 个唯一料盘 ID。 |
+| `workpieces` | 可选工件清单；每项 `id` 与 `initial_tray`，可带整数 `since`。工件 ID 唯一，初始盘须为已登记料盘。缺省时沿用按盘热历。 |
+| `transfers` | 可选拆合交接笔；每笔 `id`、`at`、`moves`，并可带 `source_trays`、`destination_trays` 或逐移的 `from`/`to`。`moves` 逐项给出 `piece` 与 `to`。同一 `batch`/`handoff_id` 的多盘明细合并为一笔。 |
 | `events` | 至多 1600 项，字段 `id tray slot at kind`。`kind` 为 `enter` 或 `leave`。 |
 | `readings` | 至多 8000 项，字段 `id probe at tenth valid`，同一测点同一秒只有一个样点，`valid` 为布尔值。 |
 | `calibrations` | 至多 512 项，字段 `id probe from to offset_tenth`。同测点生效范围互斥。 |
@@ -28,6 +30,15 @@
 6. 先规范化 JSON 再求摘要，任何非工艺顺序的数组换序均不影响摘要。相同炉次和同一摘要重复归档返回原记录，同号异料返回 HTTP 409。归档事务同时保存输入和对应分析结果。
 7. 每条签认引用一个料盘及调用方看到的最新签认版本，只追加记录。可将证据齐备的料盘签认通过，可将任意盘暂缓。交接预核只列入生效的通过签认，暂不列入项保留判定和最近签认。冻结时以相同版本和事务写入一个不可变交接件，至少有一盘通过。冻结后不再追加签认，同版本重交返回原件。CSV 只列入通过的料盘阶段，JSON 同时保留排除项和细粒度凭证。复算从归档证据生成新计算值并核对摘要。
 
+### 工件与拆合交接
+
+- 交接秒的同秒顺序固定为：离位票 → 交接 → 入位票。`[入,离)` 驻留下，`to == at` 已离位，`from == at` 的入位在交接之后才发生；因此交出盘和接盘均可凭该秒边界判定为炉位外。严格位于驻留区间内部（`from < at < to`）的盘为仍占炉位。
+- 一笔 `transfers` 可以包含多个交出盘、接盘和逐件移动，多盘拆合不拆成多笔。同一料盘在同一秒出现在不同交接笔中时，涉及该盘的所有交接笔均为 `pending`；这些笔不改变归属。同秒但料盘和工件均互不交叉的其他交接仍可 `effective`。
+- 一笔生效交接必须满足：每个交出盘当前在盘工件全部且仅出现一次、无重复工件、未使用已退役盘号、所有交出/接盘当时均在炉位外。漏件、重复转交、复用退役盘或仍占炉位时，整笔 `pending`，所有工件保留在交接前所属盘。
+- 生效交接后没有工件的交出盘立即退役。退役秒的 `enter` 以及更晚的过门票记为 `gate_retired` 异常，不再配对、不形成驻留或占用。
+- 每件工件按生效交接形成料盘寿命区间；阶段证据只取寿命区间与该盘实际驻留、测温有效区间的正时长交集。工件的实际炉区序列必须与配方阶段严格一致，且每个对应阶段的覆盖和最长连续带内秒均达标，工件才为 `ready`。
+- 料盘签认通过除满足料盘门票、路线和撞占规则外，还要求其当前全部工件均为 `ready`。工作台投影和签认 409 响应给出 `missing_evidence_pieces`；`GET runs/<id>/trace/<piece>`（以及 `/pieces/<piece>/trace`）逐件回查交接、驻留切片、过门票、样点和校准凭证。
+
 ## HTTP 接口
 
 工作台为 `/`。下表的路径以 `/api/hearth/` 为前缀，`<id>` 是炉次编号，`<tray>` 是料盘编号。POST 请求体用 UTF-8 JSON，最大 4 MiB。本机使用范围可查阅 README。
@@ -38,7 +49,9 @@
 | `POST preview` | 规范化并计算预检，无持久化。 |
 | `POST runs`、`GET runs?offset=0` | 归档或分页读取目录。 |
 | `GET runs/<id>`、`GET runs/<id>/source` | 读取工作台投影或完整输入。 |
-| `GET runs/<id>/trace/<tray>` | 回查驻留切片及相关门票、样点和校准。 |
+| `GET runs/<id>/trace/<tray>` | 回查驻留切片及相关门票、样点和校准；含本盘工件摘要与逐件凭证。 |
+| `GET runs/<id>/trace/<piece>`、`GET runs/<id>/pieces/<piece>/trace` | 逐件回查交接、寿命区间、驻留切片、门票、样点和校准。 |
+| `GET runs/<id>/pieces`、`GET runs/<id>/lineage` | 读取工件热历或交接/退役盘投影。 |
 | `POST runs/<id>/reviews/<tray>` | 提交 `revision`、`action`（`accept` 或 `hold`）、`reviewer`、`note`。 |
 | `GET runs/<id>/handoff`、`POST runs/<id>/dispatch` | 预核交接或读取已冻结内容；POST 提交 `revision`。 |
 | `GET runs/<id>/dispatch.json`、`GET runs/<id>/dispatch.csv` | 下载同一冻结件。 |
